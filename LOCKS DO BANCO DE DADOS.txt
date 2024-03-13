@@ -1,0 +1,42 @@
+- LOGAR COMO ORACLE 
+
+1- DAR UM ORA TOP E RODAR A CONSULTA ABAIXO
+
+set lines 300
+set pages 1000
+alter session set nls_date_format = 'DD-MON-YYYY HH24:MI:SS';
+column username format a30
+column machine format a30
+column osuser format a10
+column module format a45
+column OSUSER format a45
+select distinct decode (s.lockwait, NULL,'*PRENDENDO','==AGUARDANDO   ')   status_sess,
+ s.sid,s.serial#, s.username, s.machine, s.osuser, p.spid, s.status, s.module, s.INST_ID, s.SQL_ID, s.LOGON_TIME
+from (    select unique raddr, saddr, request from gv$_lock where request > 0) waiter,
+     (    select raddr, saddr, request from gv$_lock where request = 0) blocker,
+        gv$session s,
+   gv$process p
+where waiter.raddr = blocker.raddr
+and (waiter.saddr= s.saddr or blocker.saddr = s.saddr)
+and (s.paddr = p.addr)
+order by status_sess
+/
+
+2- OBSERVAR O QUE ESTA LOCKANDO 
+
+3- PEGAR O BLOQUEADOR (NUMEROS)
+
+4-DEPOIS RODAR OUTRO SCRIPT PARA MATAR O LOCK 
+-
+SELECT 'ALTER SYSTEM DISCONNECT SESSION ''' || sid || ',' || serial# || ',@' || inst_id || ''' immediate;' 
+from gv$session
+where sid = 324;
+
+-SUBSTITUIR A SID PELA NUMERO DA SESSION.
+
+-POR FIM EXECUTAR O COMANDO QUE FOI DEVOLVIDO.
+
+
+
+
+ 

@@ -1,0 +1,264 @@
+###################################################################################################
+PASSO PARA PUXAR DO SITE DA ORACLE
+-PESQUISE ORACLE EDELIVERY
+-SEGUNDO LOGUE COM SUA CONTA
+-TERCEIRO ENTRE NO BANCO DE DADOS ATUAL , E LOGUE DENTRO DO SQLPLUS PARA PEGAR A VERSAO DO ORACLE
+-DEPOIS DE PEGO A VERSAO PESQUISE NO SITE E DESMARQUE AS OUTRAS OPÇOES DEIXEI SOMENTE A PRIMEIRA
+-BAIXE O ARQUIVO .SH NA OPCÇAO MORE OPTIONS 
+-EM SEGUIDA ENTRE NO BANCO DE DADOS E RODE "vim wget.sh"
+-INSIRA O O ARQUIVO.SH E SAIA SALVANDO DANDO "wq"
+-EM SEGUIDA DIGITE "chmod +x wget.sh"
+-DEPOIS EXECUTE O COMANDO DO .SH "./wget.sh"
+
+####################################################################################################
+####################################################################################################
+
+
+REPLICAÇÃO DE AMBIENTES DO OCI PARA OPEN DATA CENTER.
+
+### ESTE TUTORIAL FOI CRIADO LEVANDO EM CONSIDERAÇÃO QUE VOCÊ POSSUI 2 SERVIDORES IDENTICOS.
+### CASO CONTRÁRIO SERÁ NECESSÁRIO REALIZAR MODIFICAÇÕES NO PROCESSO QUE NÃO ESTÃO LISTADOS AQUI.
+
+
+MONTANDO O STANDBY DO BANCO DE DADOS.
+sudo 
+01 - Configurar uma chave ssh para o usuário oracle nos 2 servidores para que ocorram transferências sem a necessidade de senha.
+     No servidor de produção logar como o usuário oracle e verificar se exite dentro
+     do diretório /home/oracle/.ssh os arquivos "id_rsa" e "id_rsa.pub".
+     Caso não existam, executar o procedimento abaixo:
+
+            - Execute o comando: 
+                ssh-keygen -t rsa
+
+            - Irá perguntar onde quer salvar a chave, pode dar enter.
+
+            - Quando perguntado para entrar com uma "passphrase", apenas tecle "Enter" duas vezes para que fique em branco,
+              caso contrário esta senha precisará ser digitada posteriormente.
+
+            - Agora as duas chaves foram geradas.
+
+            - A chave Privada está em "/home/oracle/.ssh/id_rsa" e a Pública em "/home/oracle/.ssh/id_rsa.pub".
+
+     Com as chaves geradas, você deve executar o comando cat na chave publica:
+            cat /home/oracle/.ssh/id_rsa.pub
+     Copiar ela e adicionar ela no arquivo:       
+            /home/oracle/.ssh/authorized_keys no servidor de standby.
+     Obs: Caso o arquivo não exista, você deve criar ele exatamente neste caminho.
+
+     ####### REFORÇANDO: ESTE PROCEDIMENTO DEVE SER REALIZADO NOS 2 SERVIDORES PARA QUE SE COMUNIQUEM SEM SENHA. #######
+
+
+02 - Verificar qual a versão do banco de dados que está em produção no OCI (Se possível verificar se os binários também estão lá)
+     Caso os binários de instalação do banco de dados estiverem no servidor de produção, copiar para o novo servidor.
+     Se o binário de instalação não estiver no servidor de produção, então deve baixar do FTP ou de algum lugar a mesma versão.
+     Para saber a versão correta do banco de dados, basta executar a seguinte query:
+        select * from v$version;
+
+
+03 - Procedimento para ser realizado no servidor de produção:
+     Para não correr o risco de levar para o servidor de standby um backup antigo do rman, eu limpo toda o diretório do
+     Backup físico do banco (APENAS DO BACKUP FÍSICO), não precisa mexer no diretório dos archives e após esta limpeza
+     eu entro no rman e faço uma limpeza dentro do rman tbm para que ele atualize o seu catálogo.
+
+     - Primeiro limpa a pasta do backup físco
+
+     - Entra no rman e atualiza os dados internos do Oracle a respeito do backup físico:
+        rman target /
+        CROSSCHECK BACKUPSET;
+        CROSSCHECK BACKUP OF DATABASE;
+        CROSSCHECK BACKUP OF CONTROLFILE;
+        CROSSCHECK ARCHIVELOG ALL;
+
+        DELETE FORCE NOPROMPT EXPIRED BACKUP;
+        DELETE FORCE NOPROMPT EXPIRED BACKUPSET;
+        DELETE FORCE NOPROMPT OBSOLETE;
+
+     - Após executar os comandos acima, sair do rman, entar na pasta do backup físico e executar os seguintes comandos:
+
+        I   - Pegar o DBID do banco de produção via sqlplus:
+               sqlplus "/as sysdba"
+               spool dbid.txt (199017783)
+               select dbid from v$database;
+               spool off;
+               exit;
+
+        II  - Fazer um Backup Full do banco via rman
+               backup database;
+
+        III - Fazer uma cópia do SPFILE como um pfile atualizado pelo sqlplus:
+               sqlplus / as sysdba
+               CREATE PFILE='/u01/backup/initWINT.ora' from spfile;
+               exit;
+
+        IV  - Fazer um backup do controlfile em formato de standby pelo rman:
+               rman target /
+               backup current controlfile for standby format '/u01/backup/cfileStdby.ctl';
+               exit;
+
+        V   - Executar o comando para gerar os Archives
+               sqlplus / as sysdba
+               alter system switch logfile;
+
+     - Com os arquivos já coletados e o backup realizado, enviar tudo para o servidor onde será feito o strandby:
+        cp -r $ORACLE_HOME/dbs/orapwWINT /backup/rman/
+        scp -r /backup/backup/WINT/fisico/* oracle@192.168.0.214:/backup/backup/WINT/fisico/
+        scp -r /u03/archive/WINT/* oracle@192.168.0.214:/u02/archive/WINT
+
+        OBS: ANTES DE ENVIAR OS ARQUIVOS PARA O SERVIDOR DE STANDBY, VERIFIQUE SE OS DIRETÓRIOS DE DESTINO ESTÃO VAZIOS.
+
+
+04 - Procedimento para ser realizado no servidor de standby:
+     No servidor de standby é importante que todos os diretórios que existe no servidor de produção também existam nele,
+     caso contrário o procedimento dará erro, ou você terá que utilizar o comando de renomear os datafiles.
+
+     - Validar se no arquivo /etc/hosts está configurado corretamente com o IP e o nome do servidor de standby.
+       obs: Se você quiser, você pode colocar os dados do servidor de produção também para ficar mais prático. (não é obrigatório)
+
+     - Manter a mesma estrutura de variáveis de ambiente que se encontram no servidor de Produção para que o standby não tenha
+       erros de diretórios ou variáveis de ambiente.
+
+     - Caso o Banco no servidor de Standby esteja Iniciado, você deve encerrar o mesmo com o comando:
+        sqlplus "/as sysdba"
+        shutdown immediate;
+
+     - Validar se a arvore de diretórios do servidor de standby é a mesma do servidor de produção.
+
+     - Se no servidor de Standby já existia uma instância de standby você deve apagar todos os datafiles antigos para
+       a criação dos novos datafiles baseados no backup mais recente que você acabou de realizar.
+       (datafiles, redos, controfiles, spfiles e pfiles)
+
+     - copiar o arquivo pfile da instância que você copiou do servidor de produção para o caminho:
+        cp /u01/backup/initWINT.ora $ORACLE_HOME/dbs/
+
+     - Após a limpeza, ir no diretório do backup e dar um cat do arquivo dbid.txt pois será utilizado no próximo passo.
+        cat /backup/rman/dbid.txt
+
+     - Acessar o RMAN e executar os comandos abaixo para restaurar o backup do banco via RMAN:
+        rman target /
+        set dbid=199017783 (Informar o DBID que você copiou do servidor de produção)
+        STARTUP PFILE='/u01/app/oracle/19.0.0/db/dbs/initWINT.ora' NOMOUNT;
+        restore standby controlfile from '/u01/backup/cfileStdby.ctl';
+                                         OU
+        restore controlfile from '/u01/backup/fisico/CURRENTCONTROFILE_WINT_1162016861_9034.bkp'; (usar este caso seja recuperação de base)
+
+        sqlplus / as sysdba
+        alter database mount standby database;
+        ou 
+        alter database mount; (usar este caso seja recuperação de base)
+
+        exit;
+
+     - Acessar o sqlplus para criar o arquivo spfile de inicialização do banco com o comando abaixo:
+        sqlplus "/as sysdba"     
+        CREATE SPFILE='/u01/app/oracle/19.0.0/db/dbs/spfileWINT.ora' FROM PFILE='/u01/app/oracle/19.0.0/db/dbs/initWINT.ora';
+        exit;
+
+     - Após criar o arquivo spfile pelo sqlplus, você deve voltar para o RMAN e restaurar o banco de dados:
+        rman target /
+        catalog start with '/u01/backup/rman/WILSO' NOPROMPT;
+        restore database;
+
+     - Após a conclusão do restore, você precisa executar o recover para que o banco carregue as operações salvas dos archivelogs:
+        recover database;
+
+     - Quando concluir o recover database baseado no backup rman que você fez, é necessário catalogar os archives que estão
+       no diretório de archives que você tbm copiou do servidor de produção e executar o recover novamente:
+        catalog start with '/u01/backup/rman/WILSO' NOPROMPT;
+        recover database;
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+APÓS O TERMINO DO RECOVER O SERVIDOR DE STANDBY ESTARA MONTADO POREM AINDA É NECESSARIOS CONFIGURAR OS SCRIPTS PARA QUE OS ARCHIVELOG QUE FORAM GERADOS NO SERVIDOR 
+DE PRODUCAO SEJAM TRANSFERIDOS PARA O SERVIDOR DE STANDBY AUTOMATICAMENTE E APLICADOS NO SERVIDOR DE STANDBY DE 15 EM 15 MINUTOS OU MENOS, DEPENDE DO AMBIENTE.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+NO SERVIDOR DE STANDBY:
+vim recover_database.sh
+
+####################################################################################################################
+#!/bin/bash
+source ~/.bashrc
+
+rman target / >> /home/oracle/standby/logs/archive_apply.log << EOF
+catalog start with '/path/para/archives/' NOPROMPT;
+recover database;
+exit;
+
+EOF
+
+#LIMPEZA DE ARCHIVELOGS
+#find /backup/archivelog -cmin +720 -type f -iname "*.dbf" -exec rm -f {} \;
+
+#LIMPEZA DE LOGS APLICADOS
+find /home/oracle/standby/logs/ -mtime +3 -type f -iname "archive_apply*" -exec rm -f {} \;
+####################################################################################################################
+
+chmod 777 recover_database.sh
+
+# cron standby
+*/17 * * * * /home/oracle/standby/recover_database.sh
+
+
+
+
+
+
+NO SERVIDOR DE PRODUÇÃO:
+vim sync_archive.sh
+
+####################################################################################################################
+#!/bin/bash
+. ~/.bashrc
+
+SERVIDOR="IP-EXTERNO-STANDBY"
+PORTA="PORTA-STANDBY"
+
+rsync -avz -e "ssh -p ${PORTA}" /path/para/archives/*       oracle@${SERVIDOR}:/path/para/archives/
+rsync -avz -e "ssh -p ${PORTA}" /home/oracle/standby/logs/* oracle@${SERVIDOR}:/home/oracle/standby/logs/
+####################################################################################################################
+
+chmod 777 sync_archive.sh
+
+CRIAR CRONTAB NO SERVIDOR DE PRODUÇÃO
+# cron standby
+*/5 * * * * /home/oracle/standby/sync_archive.sh
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUANDO FOR NECESSÁRIO ABRIR O BANCO, EXECUTAR O SEGUINTE PROCEDIMENTO
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+01 - Parar o script de sincronismo de standby no crontab do servidor de standby:
+      basta comentar a linha, ou simplesmente remover ela do crontab.
+
+02 - Acessar o servidor de produção e executar o seguinte comando via sqplus:
+      sqlplus "/as sysdba"
+      alter system archive log current;
+      shutdown immediate;
+      exit;
+
+03 - No servidor de produção ainda, copiar os últimos archivelogs gerados no servidor de produção para o servidor de standby:
+      scp -r /backup/archives/* oracle@srvbdstdby:/backup/archives/
+
+04 - No servidor de standby realizar a aplicação dos últimos archivelogs manualmente via rman:
+      rman target /
+      catalog start with '/backup/archives' NOPROMPT;
+      recover database;
+
+05 - Após a aplicação dos últimos archives, ainda no RMAN, você deve realizar os seguintes procedimentos:
+      rman target /
+      ALTER DATABASE RECOVER MANAGED STANDBY DATABASE FINISH;
+      ALTER DATABASE ACTIVATE PHYSICAL STANDBY DATABASE;
+      ALTER DATABASE OPEN;
+
+CASO OCORRA ALGUM PROBLEMA COM OS ARQUIVOS DE LOG:
+- VIA SQLPLUS ABRIR A BASE: ALTER DATABASE OPEN RESETLOGS;
+
+
+EM ALGUNS CASOS É NECESSÁRIO RECRIAR A TABLESPACE TEMP NO NOVO AMBIENTE CRIADO:
+- VIA SQLPLUS CRIAR UMA NOVA TABLESPACE TEMPORARIA : CREATE TEMPORARY TABLESPACE <<TEMP_TABLESPACE_NAME>> TEMPFILE '<<DATAFILE_PATH>>' SIZE 1024M;
+- VIA SQLPLUS TORNAR A NOVA TABLESPACE CRIADA COMO DEFAULT: ALTER DATABASE DEFAULT TEMPORARY TABLESPACE <<TEMP_TABLESPACE_NAME>>;
+

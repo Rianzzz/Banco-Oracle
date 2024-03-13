@@ -1,0 +1,152 @@
+############# MAQUINA #############
+-HOST DA OPEN
+-CREATE A NEW VIRTUAL MACHINE
+-COMPATIBLY DEIXAR NA ULTIMA
+-GUEST ORACLE LINUX
+-ORACLE LINUX 7
+
+######## STORAGE ############
+
+-ESCOLHER O COM MENOS ESPAÇOS (FREE)
+
+############ CPU ################
+
+-COLOCAR OS MESMOS CORES POR NUCLEOS
+-HABILITAR CPU HOT ADD
+
+############# NETWORK ##############
+
+NETWORK ADPATER 
+-ESCOLHER A LAN DO PFSENSE
+
+########### CD ##############
+
+NFBRUNSKER -> ISOS ->  ORACLE LINUX 7
+
+################## HOSTS ###############
+
+LIGAR A MAQUINA
+
+CONSOLES -> VM RC DOWNLOAD
+ 
+########### INSTALAÇAO DO ORACLE LINUX #################
+
+########## DATE  ##################
+
+-TIME MARCAR BRASIL (SAO PAULO)
+-HABILITAR NETWORK TIME
+
+########### KEYBOARD ################
+ 
+-ADICIONAR O TECLADO PORTUGUES BRASILEIRO
+-PESQUISAR BRAZIL (ESCOLHER SEGUNDA OPÇAO)
+-DAR UM MENOS NO INGLES DEIXAR SO O PORTGUES
+
+################## SOFTWARE ###############
+-NAO MEXER
+
+############## SYSTEM ################
+ 
+-DEIXAR OS DISCOS DO STAND BUY  IGUAL O SWAP SE FOR UMA MAQUINA NOVA CRIAR DE ACORDO COM A MEMORIA (SWP)
+-I WILL CONFIGURE PARTITION 
+-MUDAR PARA STANDR PARTITION
+-CLICAR NO LINK AZUL (CLICAR CONFIGURE AUTOMICON)
+-REMOVER O "/HOME" 
+-AUMENTAR O BOOT PARA 2 GB
+-UPDATE SETTINGS
+-SWAP (IGUAL A PRODUÇAO)
+-COLOCAR O RESTO NO /
+-DONE ACCEPT
+
+################ NETWORK E HOST NAME ##################
+-ENTRA NO PFSENSE
+-STATUS -> DHCP -> LEASES
+-VOLTAR NA MAQUINA E LIGAR ELA E DA UM F5
+-CLICA NO + MAIS CLARO
+-COLOCAR O IP ADDRESS
+-DAR SAVE APPLY CHANGES
+-F5 NA MAQUINA
+
+############### CRIAR A NATTY ###########################
+-FIREWWAL -> NAT
+-CLICAR NO LAPIS 
+
+################# HOSTNAME ###############################
+
+-SETAR O PADRAO DO HOSTNAME IGUAL DA PRODUÇAO
+- IPV 4 SETTINGS
+-ADD MUDAR DE AUTOMATIC PRA MANUAL
+-OLHAR NO VIDEO AS CONFIGURAÇOES DE DNS POR SER UM PADRAO DA EMPRESA
+
+################ BEGIN INSTALATION ########################
+ROOT PAASSOWRD
+-SENHA PADRAO ROOT DOS BANCOS (Brunsker$9)
+
+DAR UM REEBOT
+
+ENTRAR NO BANCO VIA CHAVE SSH
+
+############## CONFIGURAR A MAQUINA ################
+
+-DAR UM "yum install -y vim"
+-DAR UM "yum install -y net-tools"
+-DAR UM "ifconfig" COPIAR O IP DA MAQUINA
+-DAR UM VIM /ETC/HOSTS
+-COLAR ( IP  NOMEDAMAQUINA  NOMEDAMAQUINA.LOCALDOMAIN) sair salvando
+-DAR UM "vim /etc/selinux/config"
+-APAGAR O INFORCE E ESCREVER DISABLED
+-COLAR O COMANDO (systemctl stop firewalld; systemctl disable firewalld;)
+-DAR UM  init 6 (reinicia a maquina)
+-DAR UM "yum install -y oracle-database-preinstall-19c" (CRIA OS USUARIOS E O GRUPOS ORACLE)
+-LOGAR COMO ORACLE
+-PEGAR O BASHRC DO BANCO DE PRODUÇAO
+-COLAR NO BASHRC DO BANCO NOVO
+-DAR UM . .bashrc
+ATACHAR OS DISCOS NO BANCO PELA OPEN
+CASO NAO DE CRIAR UMA PASTA COM O TAMANHO SUFICIENTE E ATACHAR NA OFICIAL
+-DAR UM fdisk -l ou lsblk
+-
+criar o diretator
+-DAR UM cd /
+-DAR UM mkdir u01
+-DAR UM fdisk /dev/sdb
+-DAR n -> default -> default -> default -> default -> w (pra conferir dar um lsblk)
+-DAR UM  mkfs.xf /dev/sdb1
+-DAR UM blkid
+-COPIAR DO UID ATE O FINAL
+-DAR UM vim /etc/fstab
+-COLAR O QUE COPIOU ATRAS
+-colocar /u01 -> xfs -> defaults ->0 0 (sair salvando)
+-DAR UM mount -a
+-DAR UM DF -H PARA CONFERIR
+DAR PERMISSAO PARA O U01 DE ORACLE
+-chown oracle. -R /u01
+
+CRIAR ESTRUTURAS DE PASTAS
+-DAR UM mkdir -p $ORACLE_HOME
+- IR PRO DE PRODUÇAO
+-DAR UM .oraenv
+-DAR UM +ASM
+-DAR UM echo $ORACLE_HOME
+-COPIAR O CAMINHO
+-VOLTAR NO BANCO NOVO da um mkdir -p  e o caminho
+-DAR UM mkdir install 
+-DAR UM vim wget.sh
+-DAR UM yum install -y wget (como root)
+-DAR UM yum install -y tmux
+-DAR UM ./wget.sh
+-COLOCAR COM O USUARIO E SENHA DO ORACLE 
+-DAR UM TAILF NO ARQUIVO DE LOG
+
+
+
+
+
+
+
+
+
+
+
+
+

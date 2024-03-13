@@ -1,0 +1,17 @@
+1- Pesquisar exibir log de Eventos
+
+2-Logs do Windows
+
+3-Sistema
+
+3.1-Localizar
+
+4-Digitar o numero 1074
+
+5-Verificar o motivo do desligamento.
+
+===================================================
+Para confirmar o tempo da maquina
+Abra o gerenciador de tarefas
+Clica em CPU
+E olha o tempo dela ligada
